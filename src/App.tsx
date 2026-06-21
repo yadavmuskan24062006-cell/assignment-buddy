@@ -20,6 +20,13 @@ interface ProgressState {
   studySessions: number;
   streak: number;
 }
+interface CompletedSuggestion {
+  id: string;
+  reason: string;
+  recommendedTask: string;
+  minimumWin: string;
+  completedAt: string;
+}
 
 export default function App() {
   // Navigation & Modal State
@@ -35,6 +42,12 @@ export default function App() {
   const [completedDates, setCompletedDates] = useState<Record<string, string>>(() => {
     const saved = localStorage.getItem('local_buddy_completed_dates');
     return saved ? JSON.parse(saved) : {};
+  });
+
+  // NEW: history of completed Low Motivation Mode suggestions
+  const [completedSuggestions, setCompletedSuggestions] = useState<CompletedSuggestion[]>(() => {
+    const saved = localStorage.getItem('local_buddy_motivation_history');
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Progress State (loads from localStorage so it survives a refresh)
@@ -73,6 +86,17 @@ export default function App() {
     setProgress(prev => ({ ...prev, topicsRevised: prev.topicsRevised + 1 }));
   };
 
+// NEW: called when the student finishes a Low Motivation Mode suggestion
+  const handleMotivationSuggestionCompleted = (suggestion: { reason: string; recommendedTask: string; minimumWin: string }) => {
+    const entry: CompletedSuggestion = {
+      id: Date.now().toString(),
+      ...suggestion,
+      completedAt: new Date().toISOString(),
+    };
+    setCompletedSuggestions(prev => [entry, ...prev]);
+    setProgress(prev => ({ ...prev, studySessions: prev.studySessions + 1 }));
+  };
+
   // Load Data on Start
   useEffect(() => {
     const savedTasks = localStorage.getItem('local_buddy_tasks');
@@ -103,6 +127,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('local_buddy_completed_dates', JSON.stringify(completedDates));
   }, [completedDates]);
+
+  useEffect(() => {
+    localStorage.setItem('local_buddy_motivation_history', JSON.stringify(completedSuggestions));
+  }, [completedSuggestions]);
 
   // NEW: real day-streak calculation, runs once on app load
   useEffect(() => {
@@ -505,18 +533,40 @@ export default function App() {
                   </div>
                 ))}
               </div>
-            )}
+           )}
           </div>
+
+          {/* Low-Motivation Wins */}
+          {completedSuggestions.length > 0 && (
+            <div style={{ marginTop: '28px' }}>
+              <h3 style={{ fontSize: '18px', color: '#fff', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Heart size={20} color="#f472b6" /> Low-Motivation Wins
+              </h3>
+              <div style={{ background: '#0f172a', borderRadius: '12px', border: '1px solid #334155', overflow: 'hidden' }}>
+                {completedSuggestions.slice(0, 10).map((s, index) => (
+                  <div key={s.id} style={{ padding: '14px 16px', borderBottom: index === Math.min(completedSuggestions.length, 10) - 1 ? 'none' : '1px solid #1e293b' }}>
+                    <div style={{ color: '#fff', fontSize: '14px', fontWeight: '600' }}>{s.minimumWin}</div>
+                    <div style={{ color: '#94a3b8', fontSize: '12px', marginTop: '2px' }}>
+                      Reason: {s.reason} · {formatDate(s.completedAt)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* The Hidden Low Motivation Engine */}
-      <LowMotivationModal
+
+      {/* The Hidden Low Motivation Engine */}
+     <LowMotivationModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         assignments={assignments}
         revisions={revisions}
         recentTopic={recentTopic}
+        onSuggestionCompleted={handleMotivationSuggestionCompleted}
       />
     </div>
   );
