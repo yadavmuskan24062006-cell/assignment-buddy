@@ -1,5 +1,7 @@
 # Assignment Buddy
+## Live Demo
 
+https://assignment-buddy-orpin.vercel.app/
 AI-powered study companion that helps students manage assignments, plan revisions, and stay productive during low-motivation periods.
 
 ## Problem
