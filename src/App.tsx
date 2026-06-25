@@ -40,33 +40,31 @@ export default function App() {
   const [revisions, setRevisions] = useState<RevisionTopic[]>([]);
   const [recentTopic, setRecentTopic] = useState<{ topic: string, date: string } | null>(null);
 
-  // NEW: tracks every calendar date the app was opened, to power the streak dots
+  // Tracks every calendar date the app was opened, to power the streak dots
   const [activeDates, setActiveDates] = useState<string[]>(() => {
     const saved = localStorage.getItem('local_buddy_active_dates');
     return saved ? JSON.parse(saved) : [];
   });
 
-  // NEW: tracks WHEN each assignment was completed, keyed by assignment id
+  // Tracks WHEN each assignment was completed, keyed by assignment id
   const [completedDates, setCompletedDates] = useState<Record<string, string>>(() => {
     const saved = localStorage.getItem('local_buddy_completed_dates');
     return saved ? JSON.parse(saved) : {};
   });
 
-  // NEW: remembers what a topic's lastRevised date was *before* marking it
-  // revised today, so a mistaken click can be undone
+  // Remembers what a topic's lastRevised date was *before* marking it revised today
   const [revisionPreviousDates, setRevisionPreviousDates] = useState<Record<string, string>>(() => {
     const saved = localStorage.getItem('local_buddy_revision_previous');
     return saved ? JSON.parse(saved) : {};
   });
 
-  // NEW: remembers whether a topic had ever been genuinely revised
-  // *before* this mark — so Undo can restore that too, not just the date
+  // Remembers whether a topic had ever been genuinely revised *before* this mark
   const [revisionPreviousEverRevised, setRevisionPreviousEverRevised] = useState<Record<string, boolean>>(() => {
     const saved = localStorage.getItem('local_buddy_revision_previous_ever');
     return saved ? JSON.parse(saved) : {};
   });
 
-  // NEW: history of completed Low Motivation Mode suggestions
+  // History of completed Low Motivation Mode suggestions
   const [completedSuggestions, setCompletedSuggestions] = useState<CompletedSuggestion[]>(() => {
     const saved = localStorage.getItem('local_buddy_motivation_history');
     return saved ? JSON.parse(saved) : [];
@@ -78,14 +76,16 @@ export default function App() {
     return saved ? JSON.parse(saved) : { assignmentsCompleted: 0, topicsRevised: 0, studySessions: 0, streak: 1 };
   });
 
- const [trackedTopics, setTrackedTopics] = useState<string[]>(() => {
+  const [trackedTopics, setTrackedTopics] = useState<string[]>(() => {
     const saved = localStorage.getItem('revision_topics');
     return saved ? JSON.parse(saved) : [];
   });
+
   // AI Planner State 
   const [prompt, setPrompt] = useState('');
   const [studyPlan, setStudyPlan] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  
   const handleAIRequest = async () => {
     if (!prompt.trim()) return;
 
@@ -93,8 +93,6 @@ export default function App() {
       setIsLoading(true);
       const result = await generateStudyPlan(prompt);
       setStudyPlan(result);
-      // NEW: count this as a study session
-      setProgress(prev => ({ ...prev, studySessions: prev.studySessions + 1 }));
     } catch (error) {
       console.error(error);
       setStudyPlan("Failed to generate study plan.");
@@ -103,7 +101,7 @@ export default function App() {
     }
   };
 
-  // NEW: mark a revision topic as revised today
+  // Mark a revision topic as revised today
   const handleMarkRevised = (id: string) => {
     const today = new Date().toISOString().split('T')[0];
     const topic = revisions.find(r => r.id === id);
@@ -114,7 +112,7 @@ export default function App() {
       setRevisionPreviousEverRevised(prev => ({ ...prev, [id]: topic.everRevised === true }));
     }
 
-   const nextRevisions = revisions.map(r => r.id === id ? { ...r, lastRevised: today, everRevised: true } : r);
+    const nextRevisions = revisions.map(r => r.id === id ? { ...r, lastRevised: today, everRevised: true } : r);
     setRevisions(nextRevisions);
     localStorage.setItem('local_buddy_revisions', JSON.stringify(nextRevisions));
 
@@ -123,7 +121,7 @@ export default function App() {
     }
   };
 
-  // NEW: reverts a mistaken "mark revised today" click
+  // Reverts a mistaken "mark revised today" click
   const handleUndoRevision = (id: string) => {
     const previousDate = revisionPreviousDates[id];
     if (!previousDate) return;
@@ -159,16 +157,22 @@ export default function App() {
     localStorage.setItem('revision_topics', JSON.stringify([]));
   };
 
-  // NEW: called when the student finishes a Low Motivation Mode suggestion
+  // Called when the student finishes a Low Motivation Mode suggestion
   const handleMotivationSuggestionCompleted = (suggestion: { reason: string; recommendedTask: string; minimumWin: string }) => {
-    const entry: CompletedSuggestion = {
-      id: Date.now().toString(),
-      ...suggestion,
-      completedAt: new Date().toISOString(),
-    };
-    setCompletedSuggestions(prev => [entry, ...prev]);
-    setProgress(prev => ({ ...prev, studySessions: prev.studySessions + 1 }));
+  const today = new Date().toISOString().split('T')[0];
+  const entry: CompletedSuggestion = {
+    id: Date.now().toString(),
+    ...suggestion,
+    completedAt: new Date().toISOString(),
   };
+  
+  const alreadyWonToday = completedSuggestions.some(s => s.completedAt.split('T')[0] === today);
+  setCompletedSuggestions(prev => [entry, ...prev]);
+  
+  if (!alreadyWonToday) {
+    setProgress(prev => ({ ...prev, studySessions: prev.studySessions + 1 }));
+  }
+};
 
   // Load Data on Start
   useEffect(() => {
@@ -186,9 +190,6 @@ export default function App() {
         { id: '2', topic: 'Linked Lists', dateAdded: '2026-06-15', lastRevised: '2026-06-18', everRevised: true }
       ]);
     }
-    // Removed the hardcoded "Database Normalization" fallback — it was fake
-    // placeholder data shown to every user. recentTopic now derives from real
-    // revision data below instead.
   }, []);
 
   // Save progress whenever it changes
@@ -200,7 +201,6 @@ export default function App() {
     localStorage.setItem('local_buddy_active_dates', JSON.stringify(activeDates));
   }, [activeDates]);
 
-  // NEW: save completion dates whenever they change
   useEffect(() => {
     localStorage.setItem('local_buddy_completed_dates', JSON.stringify(completedDates));
   }, [completedDates]);
@@ -217,7 +217,7 @@ export default function App() {
     localStorage.setItem('local_buddy_motivation_history', JSON.stringify(completedSuggestions));
   }, [completedSuggestions]);
 
-  // NEW: real day-streak calculation, runs once on app load
+  // Real day-streak calculation, runs once on app load
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0];
     const lastActive = localStorage.getItem('local_buddy_last_active');
@@ -235,7 +235,6 @@ export default function App() {
           } else if (diffDays <= 0) {
             newStreak = prev.streak; // safety guard
           }
-          // diffDays > 1 means a day was missed -> stays reset at 1
         }
         return { ...prev, streak: newStreak };
       });
@@ -252,7 +251,7 @@ export default function App() {
     return diffDays;
   };
 
-  // NEW: format an ISO date nicely, e.g. "Jun 20, 2026"
+  // Format an ISO date nicely, e.g. "Jun 20, 2026"
   const formatDate = (iso: string) => {
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
@@ -261,12 +260,12 @@ export default function App() {
   const urgentAssignment = assignments.filter(a => !a.completed).sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0];
   const overdueRevision = [...revisions].sort((a, b) => new Date(a.lastRevised).getTime() - new Date(b.lastRevised).getTime())[0];
 
-  // NEW: overdue assignments — not completed AND past their due date, soonest-overdue first
+  // Overdue assignments — not completed AND past their due date, soonest-overdue first
   const overdueAssignmentsSorted = assignments
     .filter(a => !a.completed && new Date(a.dueDate) < new Date())
     .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
 
-  // NEW: derive "recent topic" from real revision data instead of fake seed data
+  // Derive "recent topic" from real revision data instead of fake seed data
   const mostRecentRevision = revisions.length > 0
     ? [...revisions].sort((a, b) => new Date(b.lastRevised).getTime() - new Date(a.lastRevised).getTime())[0]
     : null;
@@ -274,7 +273,7 @@ export default function App() {
     ? { topic: mostRecentRevision.topic, date: mostRecentRevision.lastRevised }
     : null);
 
-  // NEW: real completed count, computed directly from actual data (no drift)
+  // Real completed count, computed directly from actual data (no drift)
   const completedCount = assignments.filter(a => a.completed).length;
   const last7Days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date();
@@ -282,7 +281,7 @@ export default function App() {
     return d.toISOString().split('T')[0];
   });
 
-  // NEW: completed assignments, newest completed first
+  // Completed assignments, newest completed first
   const completedAssignmentsSorted = assignments
     .filter(a => a.completed)
     .sort((a, b) => {
@@ -291,7 +290,7 @@ export default function App() {
       return dateB - dateA;
     });
 
-  // NEW: revisions sorted most-recently-revised first
+  // Revisions sorted most-recently-revised first
   const revisionsSorted = [...revisions].sort(
     (a, b) => new Date(b.lastRevised).getTime() - new Date(a.lastRevised).getTime()
   );
@@ -305,6 +304,7 @@ export default function App() {
       <div style={{ flexShrink: 0 }}>
         <h1 style={{ textAlign: 'center', marginBottom: '20px' }}>Assignment Buddy Workspace 🚀</h1>
 
+        
         {/* Progress metric cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginBottom: '20px' }}>
           <div style={{ background: '#0f172a', padding: '16px', borderRadius: '12px', border: '1px solid #334155' }}>
@@ -315,10 +315,59 @@ export default function App() {
             <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#c084fc' }}>{progress.topicsRevised}</div>
             <div style={{ fontSize: '12px', color: '#94a3b8' }}>Topics Revised</div>
           </div>
-          <div style={{ background: '#0f172a', padding: '16px', borderRadius: '12px', border: '1px solid #334155' }}>
-            <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#10b981' }}>{progress.studySessions}</div>
-            <div style={{ fontSize: '12px', color: '#94a3b8' }}>Study Sessions</div>
+          
+          {/* TRACKER CARD */}
+          <div style={{ 
+            background: '#0f172a', 
+            padding: '16px', 
+            borderRadius: '12px', 
+            border: '1px solid #a855f7', 
+            display: 'flex', 
+            flexDirection: 'column', 
+            justifyContent: 'space-between' 
+          }}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                <div style={{ fontSize: '12px', color: '#a78bfa', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <span>🌟 Low Motivation Wins</span>
+                </div>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>This Week</div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
+                <span style={{ fontSize: '24px', fontWeight: 'bold', color: '#ffffff' }}>
+                  {progress.studySessions}
+                </span>
+                <span style={{ fontSize: '14px', color: '#94a3b8', fontWeight: 'normal' }}>wins</span>
+              </div>
+              <p style={{ margin: '4px 0 8px 0', fontSize: '11px', color: '#94a3b8', lineHeight: '1.3' }}>
+                You showed up on {progress.studySessions} low-motivation days!
+              </p>
+            </div>
+            <div>
+              <div style={{ display: 'flex', gap: '4px', marginBottom: '6px' }}>
+                {Array.from({ length: 7 }).map((_, index) => {
+                  const currentWeekProgress = progress.studySessions % 7 === 0 && progress.studySessions > 0 ? 7 : progress.studySessions % 7;
+                  const isFilled = index < currentWeekProgress;
+                  return (
+                    <div
+                      key={index}
+                      style={{
+                        flex: 1,
+                        height: '6px',
+                        borderRadius: '3px',
+                        background: isFilled ? 'linear-gradient(90deg, #c084fc 0%, #a855f7 100%)' : '#1e293b',
+                        transition: 'all 0.3s ease'
+                      }}
+                    />
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: '10px', color: '#c084fc', fontStyle: 'italic' }}>
+                Keep going, consistency beats intensity. 💜
+              </div>
+            </div>
           </div>
+
           <div style={{ background: '#0f172a', padding: '16px', borderRadius: '12px', border: '1px solid #334155' }}>
             <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#eab308' }}>{progress.streak}🔥</div>
             <div style={{ fontSize: '12px', color: '#94a3b8' }}>Day Streak</div>
@@ -360,7 +409,7 @@ export default function App() {
       </div>
 
       {/* ========================================== */}
-      {/* BOTTOM SCROLLABLE WORKSPACE                 */}
+      {/* BOTTOM SCROLLABLE WORKSPACE                */}
       {/* ========================================== */}
       <div style={{ flex: 1, overflowY: 'auto', marginTop: '20px', paddingBottom: '40px' }}>
 
@@ -524,41 +573,39 @@ export default function App() {
         )}
 
         {activeTab === 'calendar' && (
-  <StudyCalendar
-    assignments={assignments}
-    onToggleComplete={(id: string) => {
-      const nextList = assignments.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
-      setAssignments(nextList);
-      localStorage.setItem('local_buddy_tasks', JSON.stringify(nextList));
+          <StudyCalendar
+            assignments={assignments}
+            onToggleComplete={(id: string) => {
+              const nextList = assignments.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
+              setAssignments(nextList);
+              localStorage.setItem('local_buddy_tasks', JSON.stringify(nextList));
 
-      const toggledItem = nextList.find(t => t.id === id);
-      if (toggledItem?.completed) {
-        setCompletedDates(prev => ({ ...prev, [id]: new Date().toISOString() }));
-      } else {
-        setCompletedDates(prev => {
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-      }
-    }}
-    onDeleteAssignment={(id: string) => {
-      const nextList = assignments.filter(t => t.id !== id);
-      setAssignments(nextList);
-      localStorage.setItem('local_buddy_tasks', JSON.stringify(nextList));
-    }}
-  />
-)}
+              const toggledItem = nextList.find(t => t.id === id);
+              if (toggledItem?.completed) {
+                setCompletedDates(prev => ({ ...prev, [id]: new Date().toISOString() }));
+              } else {
+                setCompletedDates(prev => {
+                  const next = { ...prev };
+                  delete next[id];
+                  return next;
+                });
+              }
+            }}
+            onDeleteAssignment={(id: string) => {
+              const nextList = assignments.filter(t => t.id !== id);
+              setAssignments(nextList);
+              localStorage.setItem('local_buddy_tasks', JSON.stringify(nextList));
+            }}
+          />
+        )}
 
-      {activeTab === 'revision' && (
+        {activeTab === 'revision' && (
           <>
             <RevisionHub
               onAddTopic={(topicName: string) => {
                 const trimmedName = topicName.trim();
                 if (!trimmedName) return;
 
-                // Only create a new entry if this topic isn't already tracked
-                // (case-insensitive, so "circular LL" and "Circular LL" don't duplicate)
                 const alreadyExists = revisions.some(
                   r => r.topic.toLowerCase() === trimmedName.toLowerCase()
                 );
@@ -574,15 +621,13 @@ export default function App() {
                   const nextRevisions = [newTopic, ...revisions];
                   setRevisions(nextRevisions);
                   localStorage.setItem('local_buddy_revisions', JSON.stringify(nextRevisions));
-                  // topicsRevised is intentionally NOT touched here —
-                  // only handleMarkRevised should increment it.
                 }
 
                 handleAddTopic(trimmedName);
               }}
             />
 
-            {/* NEW: Tracked Topics dashboard box */}
+            {/* Tracked Topics dashboard box */}
             <div style={{ marginTop: '20px', background: '#0f172a', padding: '16px', borderRadius: '12px', border: '1px solid #334155' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff' }}>📌 Tracked Topics</div>
@@ -609,6 +654,7 @@ export default function App() {
             </div>
           </>
         )}
+        
         {activeTab === 'planner' && (
           <div style={{ padding: '24px', background: '#0f172a', borderRadius: '12px', border: '1px solid #334155' }}>
             <textarea
@@ -682,6 +728,46 @@ export default function App() {
               </div>
             </div>
 
+            {/* NEW: Low Motivation History Checklist Panel */}
+            <div id="motivation-history-section" style={{ marginBottom: '28px' }}>
+              <h3 style={{ fontSize: '18px', color: '#fff', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Heart size={20} color="#a78bfa" /> Low Motivation History
+              </h3>
+              {completedSuggestions.length === 0 ? (
+                <div style={{ background: '#0f172a', padding: '20px', borderRadius: '12px', border: '1px solid #334155', color: '#94a3b8', fontSize: '14px' }}>
+                  No low motivation tasks logged yet. Accomplish micro-wins in Enter Mode to stack checkmarks here!
+                </div>
+              ) : (
+                <div style={{ background: '#0f172a', borderRadius: '12px', border: '1px solid #334155', overflow: 'hidden' }}>
+                  {completedSuggestions.map((s, index) => (
+                    <div
+                      key={s.id}
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '14px 16px',
+                        borderBottom: index === completedSuggestions.length - 1 ? 'none' : '1px solid #1e293b'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <CheckCircle size={16} color="#a78bfa" />
+                        <div>
+                          <div style={{ color: '#fff', fontSize: '14px', fontWeight: '600' }}>{s.recommendedTask}</div>
+                          <div style={{ color: '#94a3b8', fontSize: '12px', marginTop: '2px' }}>
+                            Mood: <span style={{ color: '#e9d5ff' }}>{s.reason}</span> · Goal: <span style={{ color: '#cbd5e1' }}>{s.minimumWin}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#94a3b8' }}>
+                        {formatDate(s.completedAt)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Assignment History */}
             <div id="assignment-history-section" style={{ marginBottom: '28px' }}>
               <h3 style={{ fontSize: '18px', color: '#fff', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -745,7 +831,7 @@ export default function App() {
                         background: getDaysAgo(rev.lastRevised) > 7 ? '#eab308' : '#10b981'
                       }} />
                       <div style={{ background: '#0f172a', padding: '14px 16px', borderRadius: '12px', border: '1px solid #334155', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-                        <div>
+                        <div style={{ flex: 1 }}>
                           <div style={{ color: '#fff', fontSize: '14px', fontWeight: '600' }}>{rev.topic}</div>
                           <div style={{ color: '#94a3b8', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
                             <Clock size={12} /> {rev.everRevised === false ? 'Not revised yet' : `Last revised ${getDaysAgo(rev.lastRevised)} day${getDaysAgo(rev.lastRevised) === 1 ? '' : 's'} ago`}
@@ -789,25 +875,6 @@ export default function App() {
                 </div>
               )}
             </div>
-
-            {/* Low-Motivation Wins */}
-            {completedSuggestions.length > 0 && (
-              <div style={{ marginTop: '28px' }}>
-                <h3 style={{ fontSize: '18px', color: '#fff', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Heart size={20} color="#f472b6" /> Low-Motivation Wins
-                </h3>
-                <div style={{ background: '#0f172a', borderRadius: '12px', border: '1px solid #334155', overflow: 'hidden' }}>
-                  {completedSuggestions.slice(0, 10).map((s, index) => (
-                    <div key={s.id} style={{ padding: '14px 16px', borderBottom: index === Math.min(completedSuggestions.length, 10) - 1 ? 'none' : '1px solid #1e293b' }}>
-                      <div style={{ color: '#fff', fontSize: '14px', fontWeight: '600' }}>{s.minimumWin}</div>
-                      <div style={{ color: '#94a3b8', fontSize: '12px', marginTop: '2px' }}>
-                        Reason: {s.reason} · {formatDate(s.completedAt)}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>

@@ -1,306 +1,268 @@
-// src/LowMotivationModal.tsx
-import { useState, useEffect } from 'react';
-import { X, Wind, BookOpen, List, RotateCcw, PenTool, CheckCircle, Plus, Info, Zap, MessageSquare } from 'lucide-react';
-import { generateMotivationSuggestion, type MotivationSuggestion } from './gemini';
+import React, { useState } from 'react';
+import { X, Heart, Sparkles, CheckCircle, Plus, Trash2,  MessageSquare, Info, Zap } from 'lucide-react';
+import { generateMotivationSuggestion } from './gemini';
 
-const reasonLabels: Record<string, string> = {
-  tired: 'Mentally tired',
-  overwhelmed: 'Overwhelmed',
-  unsure: "Don't know what to study",
-  other: 'Something else',
-};
+interface LowMotivationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  assignments: any[];
+  revisions: any[];
+  recentTopic: { topic: string; date: string } | null;
+  onSuggestionCompleted: (suggestion: { reason: string; recommendedTask: string; minimumWin: string }) => void;
+}
 
-export function LowMotivationModal({ isOpen, onClose, assignments = [], revisions = [], recentTopic = null, onSuggestionCompleted }: any) {
-  const [reason, setReason] = useState<string | null>(null);
-  const [lowDayTasks, setLowDayTasks] = useState<string[]>([]);
-  const [newTask, setNewTask] = useState('');
-
-  // NEW: AI suggestion state
-  const [aiSuggestion, setAiSuggestion] = useState<MotivationSuggestion | null>(null);
+export const LowMotivationModal: React.FC<LowMotivationModalProps> = ({
+  isOpen,
+  onClose,
+  assignments,
+  revisions,
+  recentTopic,
+  
+}) => {
+  // Core state management
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  
+  const [newActivityInput, setNewActivityInput] = useState<string>('');
+  const [showSuccessScreen, setShowSuccessScreen] = useState<boolean>(false);
+  const [aiSuggestion, setAiSuggestion] = useState<any | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
 
-  // NEW: reset everything when the modal closes, so reopening starts fresh
-  useEffect(() => {
-    if (!isOpen) {
-      setReason(null);
-      setAiSuggestion(null);
-      setAiLoading(false);
-    }
-  }, [isOpen]);
+  React.useEffect(() => {
+    console.log("Effect triggered, selectedMood is:", selectedMood);
+  if (selectedMood) {
+   const fetchAi = async () => {
+  setAiLoading(true);
+  try {
+    const context = {
+      reason: selectedMood || 'Low Motivation',
+      overdueAssignments: assignments.filter((a) => !a.completed),
+      upcomingAssignments: assignments.filter((a) => !a.completed), // <-- ADDED THIS LINE
+      revisionTopics: revisions,
+      recentTopic: recentTopic?.topic || null,
+    };
+    const result = await generateMotivationSuggestion(context);
+    setAiSuggestion(result);
+  } catch (err) {
+    console.error("AI Error:", err);
+  } finally {
+    setAiLoading(false);
+  }
+};
+fetchAi();
+  }
+}, [selectedMood]);
 
-  // NEW: fetch an AI suggestion whenever a reason is picked (or "Try Another" is clicked)
-  const fetchSuggestion = async (reasonId: string, previous?: MotivationSuggestion | null) => {
-    if (aiLoading) return; // prevents double-fetches if clicked rapidly
-    setAiLoading(true);
-    // NOTE: we deliberately do NOT clear aiSuggestion here anymore — keeping the
-    // old card visible (just dimmed) while loading avoids the "card disappears
-    // and the button moves" feeling on regenerate.
-    try {
-      const today = new Date();
-      const context = {
-        reason: reasonLabels[reasonId] || 'Something else',
-        overdueAssignments: assignments
-          .filter((a: any) => !a.completed && new Date(a.dueDate) < today)
-          .map((a: any) => ({ title: a.title, dueDate: a.dueDate })),
-        upcomingAssignments: assignments
-          .filter((a: any) => !a.completed && new Date(a.dueDate) >= today)
-          .map((a: any) => ({ title: a.title, dueDate: a.dueDate })),
-        revisionTopics: revisions.map((r: any) => ({ topic: r.topic, lastRevised: r.lastRevised })),
-        recentTopic: recentTopic?.topic || null,
-        previousSuggestion: previous ? `${previous.recommendedTask} — ${previous.tinyTasks.join(', ')}` : undefined,
-      };
-      // Always show the loading state for at least 700ms, even if the
-      // AI responds faster — prevents the jarring "sometimes instant,
-      // sometimes 2 seconds" inconsistency from feeling broken.
-      const minDelay = new Promise(resolve => setTimeout(resolve, 700));
-      const [result] = await Promise.all([
-        generateMotivationSuggestion(context),
-        minDelay
-      ]);
-      setAiSuggestion(result);
-    } catch (err) {
-      console.error('Motivation suggestion failed:', err);
-      if (!previous) {
-        setAiSuggestion(null); // first attempt failed -> falls back to static suggestions below
-      }
-      // if a previous suggestion exists, keep showing it rather than wiping the card
-    } finally {
-      setAiLoading(false);
-    }
-  };
 
-  useEffect(() => {
-    if (reason) {
-      fetchSuggestion(reason);
-    }
-  }, [reason]);
+  // Read user rescue plan items from localStorage
+  const [rescuePlanItems, setRescuePlanItems] = useState<string[]>(() => {
+    const saved = localStorage.getItem('local_buddy_rescue_plan');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+
 
   if (!isOpen) return null;
 
-  // --- SMART ENGINE LOGIC (fallback suggestions if AI is loading or fails) ---
-  const urgentAssignment = assignments.filter((a: any) => !a.completed).sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())[0];
-  const overdueRevision = [...revisions].sort((a: any, b: any) => new Date(a.lastRevised).getTime() - new Date(b.lastRevised).getTime())[0];
-
-  const handleAddTask = () => {
-    if (newTask.trim()) {
-      setLowDayTasks([...lowDayTasks, newTask]);
-      setNewTask('');
-    }
+  const handleAddActivity = () => {
+    if (!newActivityInput.trim()) return;
+    const updatedPlan = [...rescuePlanItems, newActivityInput.trim()];
+    setRescuePlanItems(updatedPlan);
+    localStorage.setItem('local_buddy_rescue_plan', JSON.stringify(updatedPlan));
+    setNewActivityInput('');
   };
 
-  // NEW: extracted so the same plan + same state shows on BOTH the
-  // reason-picker screen (for pre-planning ahead of time) and the
-  // AI suggestion screen (as a reminder in the actual moment)
-  const renderLowDayPlan = () => (
-    <>
-      <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', color: '#1e293b' }}>Your low-day plan</h3>
-      <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#64748b' }}>Things past-you planned for days like today.</p>
+  const handleDeleteActivity = (indexToDelete: number) => {
+    const updatedPlan = rescuePlanItems.filter((_, idx) => idx !== indexToDelete);
+    setRescuePlanItems(updatedPlan);
+    localStorage.setItem('local_buddy_rescue_plan', JSON.stringify(updatedPlan));
+  };
 
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-        <input
-          value={newTask}
-          onChange={(e) => setNewTask(e.target.value)}
-          placeholder="e.g. 10 min walk, watch a recap..."
-          style={{ flex: 1, padding: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px' }}
-        />
-        <button onClick={handleAddTask} style={{ padding: '0 16px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', color: '#334155' }}>
-          <Plus size={20} />
-        </button>
-      </div>
 
-      {lowDayTasks.map((task, i) => (
-        <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #e2e8f0', color: '#334155', fontSize: '14px' }}>• {task}</div>
-      ))}
-    </>
-  );
+  
+  // Extract actual topic contexts
+ 
+  
 
-  // NEW: called when the student taps "I completed this"
-  const handleSuggestionDone = () => {
-    if (aiSuggestion && reason) {
-      onSuggestionCompleted?.({
-        reason: reasonLabels[reason] || 'Something else',
-        recommendedTask: aiSuggestion.recommendedTask,
-        minimumWin: aiSuggestion.minimumWin,
-      });
-    }
+ 
+
+  
+
+  const handleFinalClose = () => {
+    setShowSuccessScreen(false);
+    setSelectedMood(null);
     onClose();
   };
 
-  const renderMenu = () => (
-    <>
-      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-        <div style={{ display: 'inline-flex', padding: '12px', background: '#f3e8ff', borderRadius: '50%', marginBottom: '12px' }}>
-          <Info size={24} color="#9333ea" />
-        </div>
-        <h2 style={{ margin: '0 0 8px 0', fontSize: '20px', color: '#1e293b' }}>Low motivation mode</h2>
-        <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>Why don't you feel like studying today?</p>
-      </div>
+  // Restored original 4-option entry screen, matching the pre-existing reference design
+  const moodOptions = [
+    { label: "I'm mentally tired", icon: <Info size={18} color="#64748b" /> },
+    { label: "I feel overwhelmed", icon: <Zap size={18} color="#64748b" /> },
+    { label: "I don't know what to study", icon: <Info size={18} color="#64748b" /> },
+    { label: "Something else", icon: <MessageSquare size={18} color="#64748b" /> },
+  ];
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
-        {[
-          { id: 'tired', icon: <Info size={18} />, label: "I'm mentally tired" },
-          { id: 'overwhelmed', icon: <Zap size={18} />, label: "I feel overwhelmed" },
-          { id: 'unsure', icon: <Info size={18} />, label: "I don't know what to study" },
-          { id: 'other', icon: <MessageSquare size={18} />, label: "Something else" }
-        ].map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setReason(item.id)}
-            style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', color: '#334155', fontWeight: '500', fontSize: '15px', transition: 'all 0.2s' }}
-          >
-            <span style={{ color: '#64748b' }}>{item.icon}</span>
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {/* NEW: Low-Day Plan now lives here too — usable anytime, not just
-          after picking a reason. This is the "pre-plan ahead" entry point. */}
-      <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
-        {renderLowDayPlan()}
-      </div>
-    </>
-  );
-
-  // NEW: renders the AI-generated suggestion card
-  const renderAiSuggestion = () => {
-    // True first-load case: nothing to show yet, so show the full loading message
-    if (aiLoading && !aiSuggestion) {
-      return (
-        <div style={{ padding: '32px 16px', textAlign: 'center', color: '#64748b', fontSize: '14px' }}>
-          ✨ Finding something gentle for you...
-        </div>
-      );
-    }
-
-    if (!aiSuggestion) return null;
-
-    return (
-      <div style={{ marginBottom: '24px', opacity: aiLoading ? 0.5 : 1, transition: 'opacity 0.15s', pointerEvents: aiLoading ? 'none' : 'auto' }}>
-        <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '12px', padding: '16px', marginBottom: '16px', color: '#5b21b6', fontSize: '14px', fontWeight: '500' }}>
-          💜 {aiSuggestion.encouragement}
-        </div>
-
-        <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '16px', marginBottom: '16px' }}>
-          <div style={{ fontSize: '11px', fontWeight: '700', color: '#3b82f6', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.5px' }}>Recommended Focus</div>
-          <div style={{ color: '#1e293b', fontSize: '15px', fontWeight: '600' }}>{aiSuggestion.recommendedTask}</div>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
-          {aiSuggestion.tinyTasks.map((task, i) => (
-            <div key={i} style={{ display: 'flex', gap: '10px', padding: '14px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
-              <CheckCircle size={18} color="#10b981" style={{ flexShrink: 0, marginTop: '1px' }} />
-              <span style={{ color: '#334155', fontSize: '14px' }}>{task}</span>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ background: '#fef9c3', border: '1px solid #fde68a', borderRadius: '12px', padding: '14px', marginBottom: '16px' }}>
-          <div style={{ fontSize: '11px', fontWeight: '700', color: '#a16207', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.5px' }}>Minimum Win</div>
-          <div style={{ color: '#1e293b', fontSize: '14px' }}>{aiSuggestion.minimumWin}</div>
-        </div>
-
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            onClick={() => reason && fetchSuggestion(reason, aiSuggestion)}
-            disabled={aiLoading}
-            style={{ flex: 1, padding: '10px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: aiLoading ? 'default' : 'pointer', color: '#334155', fontWeight: '500', fontSize: '13px' }}
-          >
-            {aiLoading ? '🔄 Finding another idea...' : '🔄 Try Another Suggestion'}
-          </button>
-          <button
-            onClick={handleSuggestionDone}
-            disabled={aiLoading}
-            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: aiLoading ? 'default' : 'pointer', fontWeight: '500', fontSize: '13px' }}
-          >
-            <CheckCircle size={16} /> I completed this
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  const renderContent = () => {
-    let title = "Try one small thing";
-    let subtitle = "";
-    let options: any[] = [];
-
-    if (reason === 'tired') {
-      subtitle = "Go gentle today. Try one tiny reset — that counts.";
-      options = [
-        { icon: <Wind size={20} color="#8b5cf6"/>, title: "5-min box breathing", desc: "Inhale 4s • hold 4s • exhale 4s • hold 4s. Repeat for 5 minutes." },
-        { icon: <BookOpen size={20} color="#8b5cf6"/>, title: recentTopic ? `Read notes: ${recentTopic.topic}` : "Read your notes", desc: "Just skim — no highlighter, no pressure. Re-exposure is enough." },
-        { icon: <List size={20} color="#8b5cf6"/>, title: "Organize tomorrow's tasks", desc: "Pick 3 tiny things future-you will thank you for." }
-      ];
-    } else if (reason === 'overwhelmed') {
-      subtitle = "Pick just one small thing. Progress beats perfection.";
-      options = [
-        ...(urgentAssignment ? [{ icon: <RotateCcw size={20} color="#3b82f6"/>, title: urgentAssignment.title, desc: `Due: ${urgentAssignment.dueDate} - Focus only on this.` }] : []),
-        ...(overdueRevision ? [{ icon: <RotateCcw size={20} color="#8b5cf6"/>, title: overdueRevision.topic, desc: "You've studied this before. 10 minutes of re-reading is enough." }] : []),
-        { icon: <PenTool size={20} color="#64748b"/>, title: "Write down what's bothering you", desc: "2 minutes — get it on paper so it stops circling in your head." }
-      ];
-    } else if (reason === 'unsure') {
-      subtitle = "Here are some low-effort ways to keep momentum.";
-      options = [
-        ...(overdueRevision ? [{ icon: <RotateCcw size={20} color="#8b5cf6"/>, title: `Revise: ${overdueRevision.topic}`, desc: `Not reviewed recently. Estimated effort: ~15 min` }] : []),
-        ...(urgentAssignment ? [{ icon: <RotateCcw size={20} color="#3b82f6"/>, title: `Task: ${urgentAssignment.title}`, desc: `Closest deadline. Estimated effort: ~20 min` }] : []),
-        ...(recentTopic ? [{ icon: <RotateCcw size={20} color="#10b981"/>, title: `Continue: ${recentTopic.topic}`, desc: "Your most recent topic — pick up where you left off." }] : [])
-      ];
-      if (options.length === 0) {
-        options = [{ icon: <BookOpen size={20} color="#8b5cf6"/>, title: "Start a new topic", desc: "Open your planner and choose one easy concept to read." }];
-      }
-    }
-
-    return (
-      <>
-        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
-          <button onClick={() => setReason(null)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
-             ← Back
-          </button>
-        </div>
-
-        <h2 style={{ margin: '0 0 4px 0', fontSize: '20px', color: '#1e293b' }}>{title}</h2>
-        <p style={{ margin: '0 0 20px 0', color: '#64748b', fontSize: '14px' }}>{subtitle}</p>
-
-        {renderAiSuggestion()}
-
-        {!aiLoading && !aiSuggestion && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '30px' }}>
-            {options.map((opt, i) => (
-              <div key={i} style={{ display: 'flex', gap: '12px', padding: '16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer' }}>
-                <div style={{ marginTop: '2px' }}>{opt.icon}</div>
-                <div>
-                  <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '15px' }}>{opt.title}</div>
-                  <div style={{ color: '#64748b', fontSize: '13px', marginTop: '4px' }}>{opt.desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Your Low-Day Plan Section — same content + same state as the menu screen */}
-        <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
-          {renderLowDayPlan()}
-
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '30px' }}>
-            <button onClick={onClose} style={{ padding: '10px 20px', background: 'none', border: 'none', color: '#64748b', fontWeight: '500', cursor: 'pointer' }}>Maybe later</button>
-            <button onClick={onClose} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 20px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: '500', cursor: 'pointer' }}>
-              <CheckCircle size={18} /> Done
-            </button>
-          </div>
-        </div>
-      </>
-    );
-  };
+  // NEW: the entry screen is light-themed; the diagnostic panel and success
+  // screen are dark-themed — the outer modal box now switches between the
+  // two instead of being permanently dark (that mismatch was the regression).
+  const isDarkScreen = !!selectedMood || showSuccessScreen;
 
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-      <div style={{ background: '#fff', padding: '32px', borderRadius: '24px', width: '100%', maxWidth: '480px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', maxHeight: '90vh', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-12px' }}>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={20} /></button>
-        </div>
-        {!reason ? renderMenu() : renderContent()}
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0, 0, 0, 0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '16px' }}>
+      <div style={{
+        backgroundColor: isDarkScreen ? '#090d16' : '#ffffff',
+        border: isDarkScreen ? '1px solid #1e293b' : '1px solid #e2e8f0',
+        borderRadius: '16px',
+        width: '100%',
+        maxWidth: '600px',
+        maxHeight: '90vh',
+        overflowY: 'auto',
+        padding: '24px',
+        position: 'relative',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+      }}>
+
+        {/* CLOSE CONTROL */}
+        <button onClick={handleFinalClose} style={{ position: 'absolute', top: '16px', right: '16px', background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>
+          <X size={20} />
+        </button>
+
+        {showSuccessScreen ? (
+          <div style={{ padding: '20px 10px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: '64px', height: '64px', borderRadius: '50%', backgroundColor: 'rgba(34, 197, 94, 0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '20px', border: '2px solid rgba(34, 197, 94, 0.2)' }}>
+              <CheckCircle size={32} color="#22c55e" />
+            </div>
+            <h2 style={{ fontSize: '22px', fontWeight: '700', color: '#fff', margin: '0 0 10px 0' }}>You showed up today.</h2>
+            <p style={{ color: '#94a3b8', fontSize: '14px', margin: '0 0 24px 0', maxWidth: '400px', lineHeight: '1.5' }}>
+              You were productive today — even if it wasn't a perfect day. That still counts.
+            </p>
+            <button onClick={handleFinalClose} style={{ padding: '10px 32px', background: '#a855f7', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer', fontWeight: 'bold' }}>
+              Close
+            </button>
+          </div>
+        ) : !selectedMood ? (
+          /* Restored light-themed 4-option entry screen */
+          <div>
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <div style={{ display: 'inline-flex', padding: '12px', background: '#f3e8ff', borderRadius: '50%', marginBottom: '12px' }}>
+                <Info size={24} color="#9333ea" />
+              </div>
+              <h2 style={{ margin: '0 0 8px 0', fontSize: '20px', color: '#1e293b' }}>Low motivation mode</h2>
+              <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>Why don't you feel like studying today?</p>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {moodOptions.map((option, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setSelectedMood(option.label)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', color: '#334155', fontWeight: '500', fontSize: '15px', width: '100%', textAlign: 'left' }}
+                >
+                  {option.icon}
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          /* MAIN WORKSPACE DIAGNOSTIC VIEWS */
+          <>
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#fff', margin: 0 }}>{selectedMood}</h2>
+                <button 
+                  onClick={() => setSelectedMood(null)}
+                  style={{ background: 'transparent', border: 'none', padding: 0, fontSize: '12px', color: '#a855f7', cursor: 'pointer', fontWeight: '600', textDecoration: 'underline', marginLeft: '4px' }}
+                >
+                  Change
+                </button>
+              </div>
+              <p style={{ color: '#94a3b8', fontSize: '14px', margin: 0 }}>We'll keep it super gentle today.</p>
+            </div>
+
+            {/* MESSAGE FROM PAST YOU SECTION */}
+            <div style={{ background: '#0f172a', borderRadius: '12px', border: '1px solid rgba(168, 85, 247, 0.3)', padding: '16px', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <div style={{ color: '#fff', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <Heart size={16} color="#a855f7" fill="#a855f7" />
+                  <span>Message from Past You</span>
+                </div>
+                <span style={{ fontSize: '11px', background: 'rgba(168, 85, 247, 0.15)', color: '#c084fc', padding: '2px 8px', borderRadius: '12px', fontWeight: '600' }}>Your Rescue Plan</span>
+              </div>
+              
+              {rescuePlanItems.length > 0 ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
+                  {rescuePlanItems.map((item, index) => (
+                    <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', color: '#cbd5e1' }}>
+                      <span>{item}</span>
+                      <button onClick={() => handleDeleteActivity(index)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 0 }}>
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ border: '1px dashed #334155', borderRadius: '8px', padding: '16px', textAlign: 'center', marginBottom: '14px' }}>
+                  <p style={{ color: '#64748b', fontSize: '13px', margin: 0 }}>Your personalized rescue plan is empty.</p>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <input 
+                  type="text" 
+                  placeholder="Add custom low-energy task..." 
+                  value={newActivityInput}
+                  onChange={(e) => setNewActivityInput(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddActivity()}
+                  style={{ flex: 1, background: '#1e293b', border: '1px solid #334155', borderRadius: '8px', padding: '8px 12px', color: '#fff', fontSize: '13px', outline: 'none' }}
+                />
+                <button onClick={handleAddActivity} style={{ background: '#a855f7', color: '#fff', border: 'none', borderRadius: '8px', padding: '0 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Plus size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* AI SUGGESTIONS CONTEXT AND LIST VIEW */}
+          
+{/* AI SUGGESTIONS CONTEXT AND LIST VIEW */}
+<div style={{ background: '#0f172a', borderRadius: '12px', border: '1px solid #1e293b', padding: '16px', marginBottom: '20px', minHeight: '100px' }}>
+  <div style={{ color: '#fff', fontSize: '14px', fontWeight: '600', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+    <Sparkles size={16} color="#a855f7" />
+    <span>AI Suggestions for You</span>
+  </div>
+
+  {/* Force a wrapper so you can see if the div exists even if it's empty */}
+  <div style={{ color: '#fff' }}>
+    {aiLoading && <div>Thinking...</div>}
+    {!aiLoading && aiSuggestion && (
+      <div style={{ background: '#1e293b', padding: '12px', borderRadius: '8px' }}>
+        <p style={{ margin: '0 0 10px 0', fontSize: '13px' }}>{aiSuggestion.recommendedTask}</p>
+        <div style={{ fontSize: '12px', color: '#a855f7' }}>Win: {aiSuggestion.minimumWin}</div>
+      </div>
+    )}
+    {!aiLoading && !aiSuggestion && <div>No data received yet.</div>}
+  </div>
+</div>
+
+            {/* MINIMUM WIN CONTENT */}
+            <div style={{ marginBottom: '24px' }}>
+              <div style={{ color: '#fff', fontSize: '13px', fontWeight: '600', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                🏅 Minimum Win
+              </div>
+             {aiSuggestion && (
+  <p style={{ color: '#94a3b8', fontSize: '13px', margin: 0, lineHeight: '1.4' }}>
+    Just executing <span style={{ color: '#e9d5ff', fontWeight: '500' }}>"{aiSuggestion.recommendedTask.toLowerCase()}"</span> is a perfect win for today.
+  </p>
+)}
+            </div>
+
+            {/* BUTTON CONTROLS */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+             
+            </div>
+          </>
+        )}
+
       </div>
     </div>
   );
-}
+};
