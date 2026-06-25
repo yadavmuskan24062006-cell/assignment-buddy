@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { AssignmentTracker, type Assignment } from './AssignmentTracker';
 import  RevisionHub from './RevisionHub';
+import StudyCalendar from './StudyCalendar';
 import { generateStudyPlan } from './gemini';
 import { LowMotivationModal } from './LowMotivationModal';
 import { Heart, Zap, AlertTriangle, Info, RotateCcw, CheckCircle, BookOpen, Activity, History, Clock } from 'lucide-react';
@@ -523,8 +524,31 @@ export default function App() {
         )}
 
         {activeTab === 'calendar' && (
-          <div>Calendar view placeholder</div>
-        )}
+  <StudyCalendar
+    assignments={assignments}
+    onToggleComplete={(id: string) => {
+      const nextList = assignments.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
+      setAssignments(nextList);
+      localStorage.setItem('local_buddy_tasks', JSON.stringify(nextList));
+
+      const toggledItem = nextList.find(t => t.id === id);
+      if (toggledItem?.completed) {
+        setCompletedDates(prev => ({ ...prev, [id]: new Date().toISOString() }));
+      } else {
+        setCompletedDates(prev => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
+    }}
+    onDeleteAssignment={(id: string) => {
+      const nextList = assignments.filter(t => t.id !== id);
+      setAssignments(nextList);
+      localStorage.setItem('local_buddy_tasks', JSON.stringify(nextList));
+    }}
+  />
+)}
 
       {activeTab === 'revision' && (
           <>
