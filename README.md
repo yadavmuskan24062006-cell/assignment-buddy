@@ -1,73 +1,78 @@
-# React + TypeScript + Vite
+# Assignment Buddy
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+AI-powered study companion that helps students manage assignments, plan revisions, and stay productive during low-motivation periods.
 
-Currently, two official plugins are available:
+## Problem
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+Students often struggle with managing assignments, remembering revision schedules, knowing what to study next, and staying consistent during periods of low motivation.
 
-## React Compiler
+Most productivity tools assume students are always motivated. In reality, students often feel overwhelmed, stuck, or unsure where to begin.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Solution
 
-## Expanding the ESLint configuration
+Assignment Buddy combines assignment tracking, revision planning, AI-powered recommendations, and progress monitoring into a single platform designed specifically for students.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+Instead of only organizing tasks, the platform actively helps students decide what to work on next and supports them during low-motivation periods.
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Key Features
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- Assignment Tracking
+- Deadline Management
+- AI Study Recommendations
+- Revision Planning
+- Progress Insights
+- Low Motivation Mode
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Key Innovation: Low Motivation Mode
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Most study planners focus on organization.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Assignment Buddy focuses on action.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+When students feel overwhelmed, unable to focus, or simply don't want to study, they can use Low Motivation Mode. The AI generates smaller achievable actions based on the student's current situation, helping them regain momentum without feeling pressured.
+
+## How the AI Works
+
+The platform uses Google Gemini API to generate personalized recommendations.
+
+The AI considers:
+- Assignment deadlines
+- Pending tasks
+- Revision history
+- Student progress
+- Motivation state selected by the student
+
+This enables adaptive recommendations that help students focus on the most relevant next action.
+
+## Tech Stack
+
+### Frontend
+- React
+- TypeScript
+- Vite
+
+### AI
+- Google Gemini API
+
+### Storage
+- Browser LocalStorage
+
+### Libraries
+- React Markdown
+- Lucide React
+
+## Future Scope
+
+- User Accounts
+- Cloud Synchronization
+- Teacher Dashboard
+- Learning Analytics
+- Personalized Study Plans
+
+## Built For
+
+EdTech 3.0 Hackathon 2026
+
+### Mission
+
+Help students stay consistent, especially on the days they don't feel motivated.
