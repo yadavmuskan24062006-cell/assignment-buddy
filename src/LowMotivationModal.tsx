@@ -28,10 +28,13 @@ export function LowMotivationModal({ isOpen, onClose, assignments = [], revision
     }
   }, [isOpen]);
 
-  // NEW: fetch an AI suggestion whenever a reason is picked
-  const fetchSuggestion = async (reasonId: string) => {
+  // NEW: fetch an AI suggestion whenever a reason is picked (or "Try Another" is clicked)
+  const fetchSuggestion = async (reasonId: string, previous?: MotivationSuggestion | null) => {
+    if (aiLoading) return; // prevents double-fetches if clicked rapidly
     setAiLoading(true);
-    setAiSuggestion(null);
+    // NOTE: we deliberately do NOT clear aiSuggestion here anymore — keeping the
+    // old card visible (just dimmed) while loading avoids the "card disappears
+    // and the button moves" feeling on regenerate.
     try {
       const today = new Date();
       const context = {
@@ -44,12 +47,23 @@ export function LowMotivationModal({ isOpen, onClose, assignments = [], revision
           .map((a: any) => ({ title: a.title, dueDate: a.dueDate })),
         revisionTopics: revisions.map((r: any) => ({ topic: r.topic, lastRevised: r.lastRevised })),
         recentTopic: recentTopic?.topic || null,
+        previousSuggestion: previous ? `${previous.recommendedTask} — ${previous.tinyTasks.join(', ')}` : undefined,
       };
-      const result = await generateMotivationSuggestion(context);
+      // Always show the loading state for at least 700ms, even if the
+      // AI responds faster — prevents the jarring "sometimes instant,
+      // sometimes 2 seconds" inconsistency from feeling broken.
+      const minDelay = new Promise(resolve => setTimeout(resolve, 700));
+      const [result] = await Promise.all([
+        generateMotivationSuggestion(context),
+        minDelay
+      ]);
       setAiSuggestion(result);
     } catch (err) {
       console.error('Motivation suggestion failed:', err);
-      setAiSuggestion(null); // falls back to the static suggestions below
+      if (!previous) {
+        setAiSuggestion(null); // first attempt failed -> falls back to static suggestions below
+      }
+      // if a previous suggestion exists, keep showing it rather than wiping the card
     } finally {
       setAiLoading(false);
     }
@@ -74,6 +88,32 @@ export function LowMotivationModal({ isOpen, onClose, assignments = [], revision
     }
   };
 
+  // NEW: extracted so the same plan + same state shows on BOTH the
+  // reason-picker screen (for pre-planning ahead of time) and the
+  // AI suggestion screen (as a reminder in the actual moment)
+  const renderLowDayPlan = () => (
+    <>
+      <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', color: '#1e293b' }}>Your low-day plan</h3>
+      <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#64748b' }}>Things past-you planned for days like today.</p>
+
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+        <input
+          value={newTask}
+          onChange={(e) => setNewTask(e.target.value)}
+          placeholder="e.g. 10 min walk, watch a recap..."
+          style={{ flex: 1, padding: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px' }}
+        />
+        <button onClick={handleAddTask} style={{ padding: '0 16px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', color: '#334155' }}>
+          <Plus size={20} />
+        </button>
+      </div>
+
+      {lowDayTasks.map((task, i) => (
+        <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #e2e8f0', color: '#334155', fontSize: '14px' }}>• {task}</div>
+      ))}
+    </>
+  );
+
   // NEW: called when the student taps "I completed this"
   const handleSuggestionDone = () => {
     if (aiSuggestion && reason) {
@@ -96,14 +136,14 @@ export function LowMotivationModal({ isOpen, onClose, assignments = [], revision
         <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>Why don't you feel like studying today?</p>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '24px' }}>
         {[
           { id: 'tired', icon: <Info size={18} />, label: "I'm mentally tired" },
           { id: 'overwhelmed', icon: <Zap size={18} />, label: "I feel overwhelmed" },
           { id: 'unsure', icon: <Info size={18} />, label: "I don't know what to study" },
           { id: 'other', icon: <MessageSquare size={18} />, label: "Something else" }
         ].map((item) => (
-          <button 
+          <button
             key={item.id}
             onClick={() => setReason(item.id)}
             style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', color: '#334155', fontWeight: '500', fontSize: '15px', transition: 'all 0.2s' }}
@@ -113,12 +153,19 @@ export function LowMotivationModal({ isOpen, onClose, assignments = [], revision
           </button>
         ))}
       </div>
+
+      {/* NEW: Low-Day Plan now lives here too — usable anytime, not just
+          after picking a reason. This is the "pre-plan ahead" entry point. */}
+      <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+        {renderLowDayPlan()}
+      </div>
     </>
   );
 
   // NEW: renders the AI-generated suggestion card
   const renderAiSuggestion = () => {
-    if (aiLoading) {
+    // True first-load case: nothing to show yet, so show the full loading message
+    if (aiLoading && !aiSuggestion) {
       return (
         <div style={{ padding: '32px 16px', textAlign: 'center', color: '#64748b', fontSize: '14px' }}>
           ✨ Finding something gentle for you...
@@ -129,7 +176,7 @@ export function LowMotivationModal({ isOpen, onClose, assignments = [], revision
     if (!aiSuggestion) return null;
 
     return (
-      <div style={{ marginBottom: '24px' }}>
+      <div style={{ marginBottom: '24px', opacity: aiLoading ? 0.5 : 1, transition: 'opacity 0.15s', pointerEvents: aiLoading ? 'none' : 'auto' }}>
         <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: '12px', padding: '16px', marginBottom: '16px', color: '#5b21b6', fontSize: '14px', fontWeight: '500' }}>
           💜 {aiSuggestion.encouragement}
         </div>
@@ -155,14 +202,16 @@ export function LowMotivationModal({ isOpen, onClose, assignments = [], revision
 
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
-            onClick={() => reason && fetchSuggestion(reason)}
-            style={{ flex: 1, padding: '10px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', color: '#334155', fontWeight: '500', fontSize: '13px' }}
+            onClick={() => reason && fetchSuggestion(reason, aiSuggestion)}
+            disabled={aiLoading}
+            style={{ flex: 1, padding: '10px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: aiLoading ? 'default' : 'pointer', color: '#334155', fontWeight: '500', fontSize: '13px' }}
           >
-            🔄 Try Another Suggestion
+            {aiLoading ? '🔄 Finding another idea...' : '🔄 Try Another Suggestion'}
           </button>
           <button
             onClick={handleSuggestionDone}
-            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: '500', fontSize: '13px' }}
+            disabled={aiLoading}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '10px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: aiLoading ? 'default' : 'pointer', fontWeight: '500', fontSize: '13px' }}
           >
             <CheckCircle size={16} /> I completed this
           </button>
@@ -209,7 +258,7 @@ export function LowMotivationModal({ isOpen, onClose, assignments = [], revision
              ← Back
           </button>
         </div>
-        
+
         <h2 style={{ margin: '0 0 4px 0', fontSize: '20px', color: '#1e293b' }}>{title}</h2>
         <p style={{ margin: '0 0 20px 0', color: '#64748b', fontSize: '14px' }}>{subtitle}</p>
 
@@ -229,26 +278,9 @@ export function LowMotivationModal({ isOpen, onClose, assignments = [], revision
           </div>
         )}
 
-        {/* Your Low-Day Plan Section */}
+        {/* Your Low-Day Plan Section — same content + same state as the menu screen */}
         <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
-          <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', color: '#1e293b' }}>Your low-day plan</h3>
-          <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#64748b' }}>Things past-you planned for days like today.</p>
-          
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-            <input 
-              value={newTask}
-              onChange={(e) => setNewTask(e.target.value)}
-              placeholder="e.g. 10 min walk, watch a recap..."
-              style={{ flex: 1, padding: '12px', border: '1px solid #cbd5e1', borderRadius: '8px', fontSize: '14px' }}
-            />
-            <button onClick={handleAddTask} style={{ padding: '0 16px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', color: '#334155' }}>
-              <Plus size={20} />
-            </button>
-          </div>
-          
-          {lowDayTasks.map((task, i) => (
-            <div key={i} style={{ padding: '8px 0', borderBottom: '1px solid #e2e8f0', color: '#334155', fontSize: '14px' }}>• {task}</div>
-          ))}
+          {renderLowDayPlan()}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '30px' }}>
             <button onClick={onClose} style={{ padding: '10px 20px', background: 'none', border: 'none', color: '#64748b', fontWeight: '500', cursor: 'pointer' }}>Maybe later</button>
@@ -264,8 +296,8 @@ export function LowMotivationModal({ isOpen, onClose, assignments = [], revision
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
       <div style={{ background: '#fff', padding: '32px', borderRadius: '24px', width: '100%', maxWidth: '480px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)', maxHeight: '90vh', overflowY: 'auto' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: reason ? '0' : '-24px' }}>
-          {!reason && <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={20} /></button>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '-12px' }}>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={20} /></button>
         </div>
         {!reason ? renderMenu() : renderContent()}
       </div>

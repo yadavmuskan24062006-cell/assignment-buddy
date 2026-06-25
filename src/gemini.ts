@@ -26,11 +26,12 @@ export async function generateStudyPlan(prompt: string) {
 // ============================================
 
 export interface MotivationContext {
-  reason: string; // "Mentally tired" | "Overwhelmed" | "Don't know what to study" | "Something else"
+  reason: string;
   overdueAssignments: { title: string; dueDate: string }[];
   upcomingAssignments: { title: string; dueDate: string }[];
   revisionTopics: { topic: string; lastRevised: string }[];
   recentTopic: string | null;
+  previousSuggestion?: string;
 }
 
 export interface MotivationSuggestion {
@@ -60,7 +61,8 @@ Student's real data (only reference items from this list — never invent assign
 - Overdue assignments: ${context.overdueAssignments.length ? context.overdueAssignments.map(a => `${a.title} (was due ${a.dueDate})`).join('; ') : 'none'}
 - Upcoming assignments: ${context.upcomingAssignments.length ? context.upcomingAssignments.map(a => `${a.title} (due ${a.dueDate})`).join('; ') : 'none'}
 - Revision topics: ${context.revisionTopics.length ? context.revisionTopics.map(r => `${r.topic} (last revised ${r.lastRevised})`).join('; ') : 'none'}
-- Most recently studied topic: ${context.recentTopic || 'none'}
+- Most recently studied topic: ${context.recentTopic || 'none'} 
+${context.previousSuggestion ? `\nThe student already saw this suggestion and asked for something different: "${context.previousSuggestion}". Give a noticeably different recommendedTask and different tinyTasks this time.` : ''}
 
 Hard rules:
 - NEVER suggest completing an entire assignment or a big task. Every single suggestion must be doable in 5-15 minutes.
